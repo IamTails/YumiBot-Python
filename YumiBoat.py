@@ -3,16 +3,81 @@ from discord.ext import commands
 import datetime
 import time
 import platform
+import asyncio
+import logging
+import traceback
+import sys
 
-bot = commands.Bot(command_prefix="y/")
-
+description = """ some desc here. """
+asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
+discord_logger = logging.getLogger('discord')
+discord_logger.setLevel(logging.CRITICAL)
+log = setup_logger('yumi')
+help_attrs = dict(hidden=True)
+bot = commands.Bot(command_prefix="/y", description=description, help_attrs=help_attrs)
 botVersion = "1.0.0_DEV"
+errchid = "some ch id"
+#guild log
+glid = "someid"
+@bot.event
+async def on_command_error(error, ctx):
+    channel = ctx.message.channel
+    server = ctx.message.server
+    if isinstance(error, commands.MissingRequiredArgument):
+        await send_cmd_help(ctx)
+    elif isinstance(error, commands.BadArgument):
+        await send_cmd_help(ctx)
+    elif isinstance(error, commands.DisabledCommand):
+        await ctx.bot.send_message(channel, "That command is disabled.")
+    elif isinstance(error, commands.CommandInvokeError):
+        print('In {0.command.qualified_name}:'.format(ctx), file=sys.stderr)
+        traceback.print_tb(error.original.__traceback__)
+        print('{0.__class__.__name__}: {0}'.format(error.original), file=sys.stderr)
+        oneliner = "Error in command '**__{}__**' - `{}`: `{}`".format(
+            ctx.command.qualified_name, type(error.original).__name__,
+            str(error.original))
+        em = discord.Embed(title="**Error** :x:", description="Error in command",color=discord.Color.red())
+        em.add_field(name="traceback", value=oneliner)
+        await ctx.bot.send_message(channel, embed=em)
+        echan = bot.get_channel(errchid)
+        await ctx.bot.send_message(echan, oneliner +'\n' + '**On channel** : '+ channel.name + '\n'+ "**On server** : " + server.name + "  **id** : "+ server.id)
+
+    elif isinstance(error, commands.CommandOnCooldown):
+        pass
+    elif isinstance(error, commands.CommandNotFound):
+        pass
+    elif isinstance(error, commands.CheckFailure):
+        pass
+    elif isinstance(error, commands.NoPrivateMessage):
+        await bot.send_message(channel, "Nope that command is not "
+                                        "available in DMs.")
+    else:
+        print('In {0.command.qualified_name}:'.format(ctx), file=sys.stderr)
+        traceback.print_tb(error.original.__traceback__)
+        print('{0.__class__.__name__}: {0}'.format(error.original), file=sys.stderr)
+        oneliner = "Error in command '{}' - {}: {}".format(
+            ctx.command.qualified_name, type(error.original).__name__,
+            str(error.original))
+        echan = bot.get_channel(errchid)
+        await ctx.bot.send_message(echan, oneliner + 'on channel :'+ channel.name + "on server :" + server.name + "id :"+ server.id )
 
 @bot.event
 async def on_ready():
     print("Loading YumiBot...")
-    print("Using account {0.name}#{0.discriminator}".format(bot.user))
-    print("Bot ID is {0.id}".format(bot.user))
+    print('Logged in as:')
+    print(bot.user.name)
+    print(bot.user.id)
+    print('oauth link:')
+    print(discord.utils.oauth_url(bot.user.id))
+    print("Servers",str(len(bot.servers)))
+    print("Users",str(len(set(bot.get_all_members()))))
+    servers = str(len(bot.servers))
+    users = str(len(set(bot.get_all_members())))
+    message = '/yhelp | {} servers | {} users'.format(servers, users)
+    game = discord.Game(name=message)
+    await bot.change_presence(game=game)
+    if not hasattr(bot, 'uptime'):
+        bot.uptime = datetime.datetime.utcnow()
     print("====================")
 
 @bot.command(pass_context=True)
@@ -62,7 +127,46 @@ async def info(ctx):
     except Exception as e:
         await bot.say("{0.mention}: I recieved an error when trying to run the command! `{1}`\nYou shouldn't receive an error like this. \nContact Desiree#3658 in the support server, link in `{2}about`.".format(ctx.message.author, e, bot.command_prefix))
 
-        @bot.event
+        
+@bot.event
+async def on_server_join(server):
+    mirror = bot.get_channel(glid)
+    invite = await bot.create_invite(server)
+    em = discord.Embed(title="New Server Added", color=discord.Color.green())
+    avatar = bot.user.avatar_url if bot.user.avatar else bot.user.default_avatar_url
+    em.set_author(name=server.name, icon_url=avatar)
+    em.set_thumbnail(url=server.icon_url)
+    em.add_field(name="Total users", value=len(server.members))
+    em.add_field(name="Invite Link", value=invite)
+    em.add_field(name="Server Owner", value=str(server.owner))
+    em.add_field(name="Total servers", value=len(bot.servers))
+    em.set_footer(text="Server ID: " + server.id)
+    await bot.send_message(mirror, embed=em)
+    servers = str(len(bot.servers))
+    users = str(len(set(bot.get_all_members())))
+    message = '/yhelp | {} servers | {} users'.format(servers, users)
+    game = discord.Game(name=message)
+    await bot.change_presence(game=game)
+
+
+@bot.event
+async def on_server_remove(server):
+    mirror = bot.get_channel(glid)
+    em = discord.Embed(title="Server Left", color=discord.Color.red())
+    avatar = bot.user.avatar_url if bot.user.avatar else bot.user.default_avatar_url
+    em.set_author(name=server.name, icon_url=avatar)
+    em.set_thumbnail(url=server.icon_url)
+    em.add_field(name="Total servers", value=len(bot.servers))
+    em.add_field(name="Owner", value=str(server.owner))
+    em.set_footer(text="Server ID: " + server.id)
+    await bot.send_message(mirror, embed=em)
+    servers = str(len(bot.servers))
+    users = str(len(set(bot.get_all_members())))
+    message = '/yhelp | {} servers | {} users'.format(servers, users)
+    game = discord.Game(name=message)
+    await bot.change_presence(game=game)
+
+        
 async def update():
 
     payload = json.dumps({
