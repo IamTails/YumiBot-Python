@@ -15,6 +15,7 @@ discord_logger.setLevel(logging.CRITICAL)
 log = setup_logger('yumi')
 help_attrs = dict(hidden=True)
 bot = commands.Bot(command_prefix="/y", description=description, help_attrs=help_attrs)
+initial_extensions = []
 botVersion = "1.0.0_DEV"
 errchid = "some ch id"
 #guild log
@@ -63,6 +64,7 @@ async def on_command_error(error, ctx):
 
 @bot.event
 async def on_ready():
+    await update()
     print("Loading YumiBot...")
     print('Logged in as:')
     print(bot.user.name)
@@ -170,8 +172,6 @@ async def on_server_remove(server):
 async def update():
 
     payload = json.dumps({
-        'shard_id': 0,
-        'shard_count': 1,
         'server_count': len(bot.servers)
     })
 
@@ -198,4 +198,16 @@ async def update():
     async with session.post(url, data=payload, headers=headers) as resp:
         logger.info('SERVER COUNT UPDATED.\nbots.discord.pw statistics returned {0.status} for {1}\n'.format(resp, payload))
         
-bot.run('token')
+if __name__ == '__main__':
+    bot.log = setup_logger('')
+    for extension in initial_extensions:
+        try:
+            bot.load_extension(extension)
+        except Exception as e:
+            print('Failed to load extension {}\n{}: {}'.format(extension, type(e).__name__, e))
+    bot.counter = Counter()
+    bot.run(token)
+    handlers = log.handlers[:]
+    for hdlr in handlers:
+        hdlr.close()
+        log.removeHandler(hdlr)
